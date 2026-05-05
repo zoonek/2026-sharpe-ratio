@@ -12,3 +12,4 @@ ipykernel
 ipywidgets
 pyarrow
 jinja2
+pymc
