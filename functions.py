@@ -288,6 +288,7 @@ def estimate_parameters_fast( r: np.ndarray | pd.Series, p = 1.5 ) -> GARCHParam
     alpha = res.params['alpha[1]']
     beta = res.params['beta[1]']
     kurtosis = scipy.stats.kurtosis( innovations ) + 3  # Kurtosis of the innovations, not of the returns
+    denominator = ( 1 - alpha**2 * kurtosis - 2 * alpha * beta - beta**2 )
 
     return GARCHParameters( 
         SR = SR, 
@@ -305,7 +306,7 @@ def estimate_parameters_fast( r: np.ndarray | pd.Series, p = 1.5 ) -> GARCHParam
         tail_index = np.nan,
         T = T,
         p = p,
-        denominator = np.nan,
+        denominator = denominator,
 
         gjr_omega = np.nan,
         gjr_alpha = np.nan,
