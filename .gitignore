@@ -1,6 +1,7 @@
-cache/
+cache
 plots/
 outputs/
 *.csv
 *.pyc
+core.*
 TO_DELETE/
