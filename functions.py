@@ -20,6 +20,25 @@ from statsmodels.tsa.stattools import acf
 from dataclasses import dataclass
 
 
+def ppoints(n, a=None):
+    """
+    Equidistant points in [0,1], to be used as arguments of the pdf or icdf of distributions.
+    Boundaries are excluded.
+    See the documentation of the corresponding R function for more details.
+
+    Inputs: n: integer, desired number of points
+            a: offset
+    Output: numpy array, with n equidistant points
+
+    Example:
+        ppoints(20)
+    """
+    if a is None:
+        a = .5 if n > 10 else 3/8
+    assert 0 <= a <= 1, f"the offset should be in [0,1], got {a}"
+    return np.linspace( 1-a, n-a, n ) / (n+1-2*a)
+
+
 def round_p_value(p: float) -> str:
     """
     Round a p-value to 2 decimal places if above 0.01, 3 if above 0.001, and zero if below.
@@ -197,7 +216,7 @@ def estimate_parameters( r: np.ndarray | pd.Series, p = 1.5 ) -> GARCHParameters
                 stochastic_volatility_features_to_parameters = pickle.load(f)
         else: 
             stochastic_volatility_features_to_parameters = None
-    if stochastic_volatility_features_to_parameters is not None:
+    if stochastic_volatility_features_to_parameters is not None and len(y) > 100:
         sv_result = stochastic_volatility_features_to_parameters.predict( sv_features(y).reshape( 1, -1 ) )[0]
         sv_result = { 'mu': sv_result[0], 'phi': sv_result[1], 'sigma_v': sv_result[2] }
     
@@ -347,7 +366,7 @@ def estimate_parameters_fast( r: np.ndarray | pd.Series, p = 1.5 ) -> GARCHParam
 
 def formula_15( SR: float, skew: float, kurtosis: float, alpha: float, beta: float, T: int ) -> float:
     """
-    Variance of the Sharpe ratio (formula (15) from the paper)
+    Variance of the Sharpe ratio (formula (22) from the paper)
 
     The skew is the skew of the returns.
     The kurtosis is the kurtosis of the innovations.
@@ -359,6 +378,14 @@ def formula_15( SR: float, skew: float, kurtosis: float, alpha: float, beta: flo
         + SR**2 * ( kurtosis - 1 ) / 4 *
         ( 1 - beta ) ** 2 * ( 1 + phi ) / ( 1 - phi ) / ( 1 - alpha**2 * kurtosis - 2 * alpha * beta - beta**2 )
     ) / T 
+    return var
+
+
+def baseline( SR, skew=0, kurtosis=3, T=0 ): 
+    """
+    (Asymptotic) variance of the Sharpe ratio for iid returns
+    """
+    var = ( 1 - skew * SR + (kurtosis - 1) * SR**2 / 4 ) / T
     return var
 
 
@@ -392,6 +419,26 @@ def standardized_student_test():
     sample_kurtosis = 3 + scipy.stats.kurtosis( xs )
     theoretical_kurtosis = 3 + 6 / ( df - 4 )
     assert np.abs( sample_kurtosis - theoretical_kurtosis ) < 1e-1
+
+
+
+def standardized_jf_skew_t( size: int, a: float, b: float, loc: float = 0, scale: float = 1 ) -> np.ndarray:
+    D = scipy.stats.jf_skew_t(a = a, b = b)  # Not standardized
+    mu, sigma2 = D.stats()
+    D = scipy.stats.jf_skew_t(a = a, b = b, loc = -mu/np.sqrt(sigma2), scale = 1/np.sqrt(sigma2))  # Standardized
+    # D.stats(moments='mvsk')  # mean, variance, skew, kurtosis
+    return D.rvs( size = size )
+
+def standardized_jf_skew_t_test():
+    T = 1_000_000
+    a = 12
+    b = 13.4
+    np.random.seed(0)
+    xs = standardized_jf_skew_t( size = T + 100, a = a, b = b )
+    assert np.abs( xs.mean() - 0 ) < 1e-3
+    assert np.abs( xs.std() - 1 ) < 1e-2
+    assert scipy.stats.skew(xs) < 0
+    assert scipy.stats.kurtosis(xs) > 0
 
 
 @numba.njit
