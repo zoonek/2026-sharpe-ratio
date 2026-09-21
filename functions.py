@@ -422,7 +422,7 @@ def standardized_student_test():
 
 
 
-def standardized_jf_skew_t( size: int, a: float, b: float, loc: float = 0, scale: float = 1 ) -> np.ndarray:
+def standardized_jf_skew_t( size: int, a: float, b: float ) -> np.ndarray:
     D = scipy.stats.jf_skew_t(a = a, b = b)  # Not standardized
     mu, sigma2 = D.stats()
     D = scipy.stats.jf_skew_t(a = a, b = b, loc = -mu/np.sqrt(sigma2), scale = 1/np.sqrt(sigma2))  # Standardized
@@ -521,9 +521,10 @@ def gjr_garch_returns(
         h_gjr[t] = omega + (alpha + gamma * I) * y_gjr[t-1]**2 + beta * h_gjr[t-1]
         y_gjr[t] = np.sqrt(h_gjr[t]) * innovations[t]
 
-    #h_gjr = h_gjr / y_gjr.var()
-    #y_gjr = (y_gjr - y_gjr.mean()) / y_gjr.std()  # Is this needed? No.
-    
+    # Rescale to unit variance
+    y_gjr = y_gjr / np.sqrt(h_gjr[0])
+    h_gjr = h_gjr / h_gjr[0]
+
     h_gjr = h_gjr * sigma**2
     y_gjr = y_gjr * sigma + mu
     return y_gjr[-size:], np.sqrt(h_gjr[-size:])
@@ -541,6 +542,8 @@ def gjr_garch_returns_test():
         omega = 0.05, alpha = 0.05, gamma = 0.1, beta = 0.8,
         innovations = innovations,
     )
+    assert np.abs( ys.mean() ) < 1e-2, f"Mean is {ys.mean():.4f}; should be closer to 0"
+    assert np.abs( ys.std() - 1 ) < .1,  f"Std is {ys.std():.4f}; should be closer to 1"
     #return ys
 
 
