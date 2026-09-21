@@ -515,7 +515,8 @@ def gjr_garch_returns(
     assert size < len(innovations)  # Includes a burn-in period
     n = len(innovations)
     y_gjr, h_gjr = np.zeros(n), np.zeros(n)
-    h_gjr[0] = omega / (1 - alpha - gamma/2 - beta)
+    EI = np.mean( innovations ** 2 * ( innovations < 0 ) )  # 0.5 for symmetric innovations, but the innovations need not be symmetric...
+    h_gjr[0] = omega / (1 - alpha - EI * gamma - beta)
     for t in range(1, n):
         I = 1 if y_gjr[t-1] < 0 else 0
         h_gjr[t] = omega + (alpha + gamma * I) * y_gjr[t-1]**2 + beta * h_gjr[t-1]
@@ -532,20 +533,23 @@ def gjr_garch_returns(
 
 def gjr_garch_returns_test():
     np.random.seed(0)
-    n = 1_000
-    burnin = 1000
+    n = 100_000
+    burnin = 100_000
     df = 5
-    innovations = standardized_student( size = n + burnin, df = df )
-    ys, _ = gjr_garch_returns( 
-        size = n, 
-        mu = 0, sigma = 1,
-        omega = 0.05, alpha = 0.05, gamma = 0.1, beta = 0.8,
-        innovations = innovations,
-    )
-    assert np.abs( ys.mean() ) < 1e-2, f"Mean is {ys.mean():.4f}; should be closer to 0"
-    assert np.abs( ys.std() - 1 ) < .1,  f"Std is {ys.std():.4f}; should be closer to 1"
-    #return ys
-
+    for which in ['student', 'jf_skew_t']:
+        if which == 'student':         
+            innovations = standardized_student( size = n + burnin, df = df )
+        else:
+            innovations = standardized_jf_skew_t( size = n + burnin, a = 2, b = 130 )
+        ys, _ = gjr_garch_returns( 
+            size = n, 
+            mu = 0, sigma = 1,
+            omega = 0.05, alpha = 0.05, gamma = 0.1, beta = 0.8,
+            innovations = innovations,
+        )
+        assert np.abs( ys.mean() ) < 1e-2, f"{which}: Mean is {ys.mean():.4f}; should be closer to 0"
+        assert np.abs( ys.std() - 1 ) < .1,  f"{which}: Std is {ys.std():.4f}; should be closer to 1"
+    
 
 @numba.njit
 def egarch_returns(
