@@ -638,6 +638,7 @@ def stochastic_volatility_returns(
     Return returns and volatility
     """
     assert size < len(innovations)  # Includes a burn-in period
+    assert np.abs(phi) < 1
     n = len(innovations)
     y_sv, h_sv = np.zeros(n), np.zeros(n)
     v = np.random.normal(0, sigma_v, n)
@@ -646,9 +647,13 @@ def stochastic_volatility_returns(
         h_sv[t] = mu_v + phi * (h_sv[t-1] - mu_v) + v[t]
         y_sv[t] = np.exp(h_sv[t]/2) * innovations[t]
 
-    #h_sv = h_sv - np.log(y_sv.var())
-    #y_sv = (y_sv - y_sv.mean()) / y_sv.std()  # Is this needed? No.
-    
+    # Rescale to unit variance. h is Gaussian, so E[exp(h)] = exp(mu_v + Var(h)/2).
+    # Innovation skewness does not enter: h_t is independent of z_t and E[z^2]=1.
+    # Dividing by exp(mu_v/2) alone is not enough (Jensen: E[exp(h)] > exp(E[h])).
+    log_uncond_var = mu_v + 0.5 * sigma_v**2 / (1 - phi**2)
+    y_sv = y_sv / np.exp(log_uncond_var / 2)
+    h_sv = h_sv - log_uncond_var
+
     h_sv = h_sv + 2 * np.log(sigma)
     y_sv = y_sv * sigma + mu
 
@@ -656,17 +661,22 @@ def stochastic_volatility_returns(
 
 def stochastic_volatility_returns_test():
     np.random.seed(0)
-    n = 1_000
-    burnin = 1000
+    n = 100_000
+    burnin = 100_000
     df = 5
-    innovations = standardized_student( size = n + burnin, df = df )
-    ys, _ = stochastic_volatility_returns( 
-        size = n, 
-        mu = 0, sigma = 1,
-        mu_v = -1.0, phi = 0.95, sigma_v = 0.2,
-        innovations = innovations,
-    )
-    #return ys
+    for which in ['student', 'jf_skew_t']:
+        if which == 'student':
+            innovations = standardized_student( size = n + burnin, df = df )
+        else:
+            innovations = standardized_jf_skew_t( size = n + burnin, a = 2, b = 130 )
+        ys, _ = stochastic_volatility_returns(
+            size = n,
+            mu = 0, sigma = 1,
+            mu_v = -1.0, phi = 0.95, sigma_v = 0.2,
+            innovations = innovations,
+        )
+        assert np.abs( ys.mean() ) < 1e-2, f"{which}: Mean is {ys.mean():.4f}; should be closer to 0"
+        assert np.abs( ys.std() - 1 ) < .1,  f"{which}: Std is {ys.std():.4f}; should be closer to 1"
 
 
 def plot_parameters_garch( parameters ):
