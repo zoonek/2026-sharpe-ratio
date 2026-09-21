@@ -577,6 +577,10 @@ def egarch_returns(
     #log_h = log_h - np.log(y_eg.var())
     #y_eg = (y_eg - y_eg.mean()) / y_eg.std()  # Is this needed? No.
     
+    # Rescale to unit variance
+    y_eg = y_eg / np.exp(log_h[0]/2)
+    log_h = log_h - log_h[0]
+
     log_h = log_h + 2 * np.log(sigma)
     y_eg = y_eg * sigma + mu
 
@@ -585,17 +589,22 @@ def egarch_returns(
 
 def egarch_returns_test():
     np.random.seed(0)
-    n = 1_000
-    burnin = 1000
+    n = 100_000
+    burnin = 100_000
     df = 5
-    innovations = standardized_student( size = n + burnin, df = df )
-    ys, _ = egarch_returns( 
-        size = n,
-        mu = 0, sigma = 1,
-        omega = -0.1, alpha = 0.1, gamma = -0.1, beta = 0.9,
-        innovations = innovations,
-    )
-    #return ys
+    for which in ['student', 'jf_skew_t']:
+        if which == 'student':         
+            innovations = standardized_student( size = n + burnin, df = df )
+        else:
+            innovations = standardized_jf_skew_t( size = n + burnin, a = 2, b = 130 )
+        ys, _ = egarch_returns( 
+            size = n,
+            mu = 0, sigma = 1,
+            omega = -0.1, alpha = 0.1, gamma = -0.1, beta = 0.9,
+            innovations = innovations,
+        )
+        assert np.abs( ys.mean() ) < 1e-2, f"{which}: Mean is {ys.mean():.4f}; should be closer to 0"
+        assert np.abs( ys.std() - 1 ) < .1,  f"{which}: Std is {ys.std():.4f}; should be closer to 1"
 
 
 def sv_features(r: np.ndarray, K: int = 5) -> np.ndarray:
